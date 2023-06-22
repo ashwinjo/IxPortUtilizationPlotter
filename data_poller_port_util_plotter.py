@@ -2,17 +2,14 @@ import time
 import config
 import logging
 
+from datetime import datetime
 import mysql.connector
 
 import IxOSRestAPICaller as ixOSRestCaller
 from RestApi.IxOSRestInterface import IxRestSession
 
 
-def write_data_to_database(records):
-    
-    rcd_timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    logging.basicConfig(level=logging.INFO)
-    logging.info(rcd_timestamp)
+def write_data_to_database(records=None, date_string=None):
 
     # Connect to MySQL
     cnx = mysql.connector.connect(
@@ -49,7 +46,7 @@ def write_data_to_database(records):
                         ('{rcd["chassisIp"]}', '{rcd["typeOfChassis"]}', '{rcd["cardNumber"]}','{rcd["portNumber"]}','{rcd.get("linkState", "NA")}',
                         '{rcd.get("phyMode","NA")}','{rcd.get("transceiverModel", "NA")}', '{rcd.get("transceiverManufacturer", "NA")}','{rcd["owner"]}',
                         '{rcd.get("speed", "NA")}','{rcd.get("type", "NA")}','{rcd["totalPorts"]}','{rcd["ownedPorts"]}', '{rcd["freePorts"]}','{ts}', 
-                        '{rcd_timestamp}')"""
+                        '{date_string}')"""
         
         cur.execute(query)
         
@@ -60,7 +57,7 @@ def write_data_to_database(records):
     cnx.close()
 
 
-def get_chassis_port_data():
+def get_chassis_port_data(date_string):
     """This is a call to RestAPI to get chassis card port summary data
     """
     port_list_details = []
@@ -88,10 +85,14 @@ def get_chassis_port_data():
                     'transmitState': 'NA'
                 }]
                 port_list_details.append(a)
-        write_data_to_database(records=port_list_details)
+        write_data_to_database(records=port_list_details, date_string=date_string)
 
 
 if __name__ == '__main__':
     while True:
-        get_chassis_port_data()
+        current_datetime=datetime.utcnow()
+        date_string = current_datetime.strftime('%Y-%m-%d %H:%M:%S')
+        logging.basicConfig(level=logging.INFO)
+        logging.info(date_string)
+        get_chassis_port_data(date_string)
         time.sleep(config.POLLING_INTERVAL)
