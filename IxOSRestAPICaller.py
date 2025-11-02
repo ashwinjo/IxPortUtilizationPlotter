@@ -98,28 +98,7 @@ def get_chassis_information(session):
         
     chassis_filter_dict.update(temp_dict)
     return chassis_filter_dict
-    
-def get_chassis_cards_information(session, ip, type_of_chassis):
-    """Method to get chassis card information from Ixia Chassis using RestPy"""
-    card_list= session.get_cards().data
-    final_card_details_list= []
-    last_update_at = datetime.now(timezone.utc).strftime("%m/%d/%Y, %H:%M:%S")
-    # Cards on Chassis
-    sorted_cards = sorted(card_list, key=lambda d: d['cardNumber'])
-    
-    
-    for sc  in sorted_cards:
-        final_card_details_list.append({"chassisIp": ip, 
-                                        "chassisType": type_of_chassis,
-                                        "cardNumber":sc.get("cardNumber"), 
-                                        "serialNumber": sc.get("serialNumber"),
-                                        "cardType": sc.get("type"),
-                                        "cardState": sc.get("state"), 
-                                        "numberOfPorts":sc.get("numberOfPorts", "No data"),
-                                        "lastUpdatedAt_UTC": last_update_at
-                                        })
-    return final_card_details_list
-    
+
 def get_chassis_ports_information(session, chassisIp, chassisType):
     """Method to get chassis port information from Ixia Chassis using RestPy"""
     port_data_list = [] # Final port information list
