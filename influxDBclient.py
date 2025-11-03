@@ -93,7 +93,7 @@ def query_data():
             time_str = str(record.get_time())[:19]  # Truncate microseconds
             chassis = record.values.get("chassis", "N/A")
             card = record.values.get("card", "N/A")
-            port = record.values.get("fullyQualifiedPortName", "N/A")
+            port = record.values.get("port", "N/A")
             owner = record.values.get("owner", "N/A")
             link_state = record.values.get("linkState", "N/A")
             transmit_state = record.values.get("transmitState", "N/A")
@@ -135,4 +135,4 @@ if __name__ == "__main__":
     pass
     
     # Or just query existing data
-    #query_data()               # Query and display the data
+    query_data()               # Query and display the data

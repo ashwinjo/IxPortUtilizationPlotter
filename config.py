@@ -42,6 +42,7 @@ else:
 
 # Polling interval in seconds (how often to query chassis)
 POLLING_INTERVAL = int(os.getenv('POLLING_INTERVAL', '10'))
+POLLING_INTERVAL_PERF_METRICS = int(os.getenv('POLLING_INTERVAL_PERF_METRICS', '60'))
 
 # =============================================================================
 # INFLUXDB CONFIGURATION

@@ -1,10 +1,15 @@
 import time
+import json
+# Load .env file if it exists
+from dotenv import load_dotenv
+ 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from IxOSRestAPICaller import get_perf_metrics
 from prometheus_client import start_http_server, Gauge
 from RestApi.IxOSRestInterface import IxRestSession
-from config import CHASSIS_LIST
+from config import CHASSIS_LIST, POLLING_INTERVAL_PERF_METRICS
 
+load_dotenv()
 # ==============================================================================
 # METRIC DEFINITIONS
 # ==============================================================================
@@ -114,7 +119,7 @@ def main():
         print(f"[Poll #{poll_count}] Completed in {elapsed_time:.2f} seconds")
         print(f"Next poll in 110 seconds...\n")
         
-        time.sleep(110)
+        time.sleep(POLLING_INTERVAL_PERF_METRICS)
 
 if __name__ == "__main__":
     try:

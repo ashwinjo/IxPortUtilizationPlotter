@@ -1,6 +1,8 @@
 import time
 import config
 import logging
+from dotenv import load_dotenv
+
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from datetime import datetime
@@ -8,6 +10,8 @@ import IxOSRestAPICaller as ixOSRestCaller
 from RestApi.IxOSRestInterface import IxRestSession
 from influxDBclient import write_data_to_influxdb
 
+
+load_dotenv()
 
 def poll_single_chassis(chassis):
     """Poll a single chassis and return its port data
