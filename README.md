@@ -8,6 +8,7 @@ Open-source monitoring tool for visualizing Ixia/Keysight IxOS chassis port util
 - [Architecture](#architecture)
 - [Features](#features)
 - [Prerequisites](#prerequisites)
+- [🐳 Docker Deployment (Recommended)](#-docker-deployment-recommended)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Usage](#usage)
@@ -34,60 +35,42 @@ Data is stored in **InfluxDB** and visualized in **Grafana** for real-time monit
 ## 🏗️ Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                    IxOS Chassis (10.36.75.205)                  │
-│  ┌──────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐     │
-│  │Port 1│Port 2│Port 3│Port 4│Port 5│Port 6│Port 7│Port 8│ ... │
-│  └──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘     │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ REST API
-                                │
-┌───────────────────────────────▼─────────────────────────────────┐
-│                      portInfoPoller.py                          │
-│  ┌─────────────────────────────────────────────────────────┐   │
-│  │  Parallel Thread Pool (ThreadPoolExecutor)              │   │
-│  │  ┌────────┐  ┌────────┐  ┌────────┐  ┌────────┐        │   │
-│  │  │Thread 1│  │Thread 2│  │Thread 3│  │Thread N│  ...   │   │
-│  │  │Chassis1│  │Chassis2│  │Chassis3│  │ChassisN│        │   │
-│  │  └────────┘  └────────┘  └────────┘  └────────┘        │   │
-│  └─────────────────────────────────────────────────────────┘   │
-│                             │                                   │
-│  ┌──────────────────────────▼──────────────────────────────┐   │
-│  │         IxOSRestAPICaller.py                            │   │
-│  │  - get_chassis_ports_information()                      │   │
-│  │  - Processes REST API responses                         │   │
-│  └──────────────────────────────────────────────────────────┘  │
-│                             │                                   │
-│  ┌──────────────────────────▼──────────────────────────────┐   │
-│  │         RestApi/IxOSRestInterface.py                    │   │
-│  │  - IxRestSession (authentication & HTTP)                │   │
-│  │  - get_ports(), get_chassis(), get_cards()              │   │
-│  └──────────────────────────────────────────────────────────┘  │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ Write synchronized data
-                                │
-┌───────────────────────────────▼─────────────────────────────────┐
-│                      influxDBclient.py                          │
-│  - write_data_to_influxdb()                                     │
-│  - Batch writes all chassis data with synchronized timestamps   │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-                                │
-┌───────────────────────────────▼─────────────────────────────────┐
-│                      InfluxDB (Time Series DB)                  │
-│  Bucket: ixosChassisStatistics                                  │
-│  Measurement: portUtilization                                   │
-│    Tags: chassis, card, port                                    │
-│    Fields: owner, linkState, transmitState, totalPorts, etc.    │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │ Flux queries
-                                │
-┌───────────────────────────────▼─────────────────────────────────┐
-│                      Grafana Dashboard                          │
-│  - State Timeline panels for port ownership visualization       │
-│  - Real-time monitoring with auto-refresh                       │
-│  - Historical trend analysis                                    │
-└─────────────────────────────────────────────────────────────────┘
+                    IxOS Chassis Fleet
+┌──────────────┐  ┌──────────────┐  ┌──────────────┐
+│ Chassis 1    │  │ Chassis 2    │  │ Chassis N    │
+│ 10.36.75.205 │  │ 10.36.75.206 │  │ ...          │
+└──────┬───────┘  └──────┬───────┘  └──────┬───────┘
+       │ REST API        │ REST API        │ REST API
+       └─────────────────┴─────────────────┘
+                         │
+    ┌────────────────────▼────────────────────┐
+    │    HOST MACHINE (Python Poller)         │
+    │  ┌──────────────────────────────────┐   │
+    │  │   portInfoPoller.py              │   │
+    │  │   - Parallel chassis polling     │   │
+    │  │   - ThreadPoolExecutor           │   │
+    │  └────────────┬─────────────────────┘   │
+    └───────────────┼─────────────────────────┘
+                    │ HTTP (localhost:8086)
+    ┌───────────────▼─────────────────────────┐
+    │         DOCKER STACK                    │
+    │  ┌─────────────────────────────────┐    │
+    │  │  InfluxDB (Port 8086)           │    │
+    │  │  - Time-series database         │    │
+    │  │  - Bucket: ixosChassisStatistics│    │
+    │  └──────────┬──────────────────────┘    │
+    │             │                            │
+    │  ┌──────────▼──────────────────────┐    │
+    │  │  Grafana (Port 3000)            │    │
+    │  │  - Visualization                │    │
+    │  │  - InfluxDB + Prometheus        │    │
+    │  └─────────────────────────────────┘    │
+    │                                          │
+    │  ┌─────────────────────────────────┐    │
+    │  │  Prometheus (Port 9090)         │    │
+    │  │  - Metrics collection           │    │
+    │  └─────────────────────────────────┘    │
+    └──────────────────────────────────────────┘
 ```
 
 ### Data Flow
@@ -138,7 +121,161 @@ concurrent.futures (built-in Python 3.2+)
 
 ---
 
-## 🚀 Installation
+## 🐳 Docker Deployment (Recommended)
+
+**The easiest way to get started!** Deploy the entire stack with a single command using Docker Compose.
+
+### Quick Start with Docker
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/yourusername/IxPortUtilizationPlotter.git
+   cd IxPortUtilizationPlotter
+   ```
+
+2. **Configure your chassis:**
+   ```bash
+   cp env.example .env
+   nano .env  # Edit chassis IPs and credentials
+   ```
+
+3. **Start infrastructure services:**
+   ```bash
+   ./start.sh
+   ```
+   
+   Or manually:
+   ```bash
+   docker compose up -d
+   ```
+
+4. **Run the poller (on host machine):**
+   ```bash
+   python3 portInfoPoller.py
+   ```
+
+5. **Access services:**
+   - **Grafana:** http://localhost:3000 (admin/admin) - or your configured port
+   - **InfluxDB:** http://localhost:8086 (admin/admin) - or your configured port
+   - **Prometheus:** http://localhost:9090 (no auth) - or your configured port
+
+### What's Included
+
+- ✅ **InfluxDB 2.x** - Auto-configured with bucket and org (Docker)
+- ✅ **Prometheus** - Metrics collection and monitoring (Docker)
+- ✅ **Grafana** - Pre-configured data sources (Docker)
+- ✅ **IxOS Poller** - Runs on host machine (Python script)
+- ✅ **Persistent volumes** - Data survives container restarts
+- ✅ **Health checks** - Automatic service monitoring
+- ✅ **One-command deployment** - For infrastructure services
+
+### Configuration
+
+**Docker services (`.env` file):**
+
+```bash
+# Service Ports (customize if needed)
+INFLUXDB_PORT=8086
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
+
+# InfluxDB settings
+INFLUXDB_TOKEN=your-super-secret-token-change-me
+INFLUXDB_ORG=keysight
+INFLUXDB_BUCKET=ixosChassisStatistics
+
+# Grafana settings
+GRAFANA_ADMIN_PASSWORD=admin
+```
+
+**IxOS Poller (`config.py` file):**
+
+```python
+# Chassis list
+CHASSIS_LIST = [
+    {
+        "ip": "10.36.75.205",
+        "username": "admin",
+        "password": "admin",
+    },
+]
+
+# Polling interval in seconds
+POLLING_INTERVAL = 10
+
+# InfluxDB connection (matches Docker service)
+INFLUXDB_URL = "http://localhost:8086"
+INFLUXDB_TOKEN = "your-super-secret-token-change-me"
+```
+
+### Customizing Ports
+
+If the default ports conflict with existing services on your host, you can customize them in the `.env` file:
+
+```bash
+# Change ports to avoid conflicts
+INFLUXDB_PORT=8087      # Instead of default 8086
+PROMETHEUS_PORT=9091    # Instead of default 9090
+GRAFANA_PORT=3001       # Instead of default 3000
+```
+
+**Important:** After changing ports, you must also update `config.py`:
+
+```python
+# Update InfluxDB URL to match the new port
+INFLUXDB_URL = "http://localhost:8087"  # Use your configured port
+```
+
+Then restart the Docker services:
+```bash
+docker compose down
+docker compose up -d
+```
+
+### Management
+
+**Docker services:**
+```bash
+# View logs
+docker compose logs -f
+
+# Stop stack
+docker compose down
+
+# Restart services
+docker compose restart
+```
+
+**IxOS Poller:**
+```bash
+# Run poller
+python3 portInfoPoller.py
+
+# Run in background
+nohup python3 portInfoPoller.py > poller.log 2>&1 &
+
+# Stop background poller
+pkill -f portInfoPoller.py
+```
+
+### 📚 Detailed Docker Guide
+
+For complete Docker deployment documentation including:
+- Advanced configuration
+- Production deployment
+- Backup and restore
+- Troubleshooting
+- Security considerations
+
+See **[DOCKER_DEPLOYMENT.md](DOCKER_DEPLOYMENT.md)**
+
+---
+
+## 🚀 Manual Installation
+
+If you prefer not to use Docker, follow these steps for manual installation:
+
+### Installation
 
 ### 1. Clone the Repository
 ```bash
@@ -516,6 +653,44 @@ This prevents showing stale data when polling stops.
 
 **Solution:** Adjust polling interval or reduce number of chassis polled simultaneously.
 
+### Issue: Port Already in Use / Port Conflicts
+
+**Symptoms:**
+```
+Error starting container: port is already allocated
+Bind for 0.0.0.0:8086 failed: port is already in use
+```
+
+**Solution:** Customize ports in `.env` file:
+
+1. **Edit `.env` file:**
+   ```bash
+   # Change conflicting ports
+   INFLUXDB_PORT=8087      # Instead of 8086
+   PROMETHEUS_PORT=9091    # Instead of 9090
+   GRAFANA_PORT=3001       # Instead of 3000
+   ```
+
+2. **Update `config.py` to match:**
+   ```python
+   INFLUXDB_URL = "http://localhost:8087"  # Use your new port
+   ```
+
+3. **Restart Docker services:**
+   ```bash
+   docker compose down
+   docker compose up -d
+   ```
+
+**Check what's using a port:**
+```bash
+# On Linux/macOS
+lsof -i :8086
+
+# On Linux (alternative)
+netstat -tulpn | grep 8086
+```
+
 ---
 
 ## 🔍 Technical Details
@@ -676,12 +851,22 @@ Below are examples of the real-time port ownership visualization in Grafana:
 
 ## 🔄 Changelog
 
-### Version 2.0 (Latest)
+### Version 3.0 (Latest) - Docker Release
+- 🐳 **Full Docker Compose support** - One-command deployment
+- 🔧 **Auto-configuration** - InfluxDB and Grafana pre-configured
+- 📦 **Self-contained package** - No manual setup required
+- 🛡️ **Health checks** - Automatic service monitoring
+- 📝 **Comprehensive Docker documentation** - Production-ready deployment guide
+- 🔐 **Environment-based configuration** - Easy secrets management
+- 💾 **Persistent volumes** - Data survives container restarts
+
+### Version 2.0
 - ✨ Added parallel chassis polling for synchronized timestamps
 - 🚀 Performance improvement: 85-90% faster for multiple chassis
 - 🔧 Fixed field name mismatches in queries
 - 📊 Added elapsed() filter to prevent stale data visualization
 - 📝 Comprehensive documentation and troubleshooting guide
+- 🐛 Fixed automatic data deletion on poller restart
 
 ### Version 1.0
 - Initial release

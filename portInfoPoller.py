@@ -6,7 +6,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 import IxOSRestAPICaller as ixOSRestCaller
 from RestApi.IxOSRestInterface import IxRestSession
-from influxDBclient import write_data_to_influxdb, delete_measurement_data
+from influxDBclient import write_data_to_influxdb
 
 
 def poll_single_chassis(chassis):
@@ -87,9 +87,9 @@ def get_chassis_port_data():
 
 
 if __name__ == '__main__':
-    # Delete all data from InfluxDB measurement
-    print("Deleting all data from InfluxDB measurement...")
-    delete_measurement_data()
+    # OPTIONAL: Uncomment below to delete all historical data on startup (use with caution!)
+    # print("Deleting all data from InfluxDB measurement...")
+    # delete_measurement_data()
     
     # Start parallel chassis poller
     print(f"Starting parallel chassis poller for {len(config.CHASSIS_LIST)} chassis...")
