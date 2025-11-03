@@ -1,4 +1,4 @@
-# IxOS Port Utilization Plotter
+# IxOS Metrics Plotter
 
 **Real-time monitoring and visualization of Ixia/Keysight IxOS chassis port utilization with parallel polling, time-series storage, and interactive dashboards.**
 
