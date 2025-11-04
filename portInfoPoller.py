@@ -2,12 +2,12 @@ import time
 import config
 import logging
 from dotenv import load_dotenv
-from datetime import datetime
+from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from RestApi.IxOSRestInterface import IxRestSession
 from influxDBclient import write_data_to_influxdb
-
+from config import POLLING_INTERVAL
 
 load_dotenv()
 
@@ -23,6 +23,7 @@ def get_chassis_ports_information(session, chassisIp, chassisType):
     
     keys_to_keep = ['owner', 
                     'cardNumber', 
+                    'portNumber',
                     'fullyQualifiedPortName', 
                     'linkState', 
                     'transmitState']
@@ -40,7 +41,7 @@ def get_chassis_ports_information(session, chassisIp, chassisType):
             port_data["owner"] = "Free"
             
         for k in keys_to_remove:
-            port_data.pop(k)
+            port_data.pop(k, None)  # Use None as default to avoid KeyError if key doesn't exist
     
     # Creating the final port information list
     for port in port_list:
@@ -81,7 +82,7 @@ def poll_single_chassis(chassis):
             chassis["password"], 
             verbose=False)
         
-        port_list_details = ixOSRestCaller.get_chassis_ports_information(
+        port_list_details = get_chassis_ports_information(
             session, 
             chassis["ip"], 
             "NA")
@@ -97,6 +98,8 @@ def poll_single_chassis(chassis):
             'transceiverModel': 'NA',
             'transceiverManufacturer': 'NA',
             'portNumber': 'NA',
+            'portName': 'NA',
+            'fullyQualifiedPortName': 'NA',
             'linkState': 'NA',
             'cardNumber': 'NA',
             'lastUpdatedAt_UTC': 'NA',
@@ -174,5 +177,5 @@ if __name__ == '__main__':
             print(f"[Poll #{poll_count}] ⚠ No data collected")
         
         # Wait for next polling interval
-        time.sleep(config.POLLING_INTERVAL)
+        time.sleep(POLLING_INTERVAL)
         print("-" * 80)

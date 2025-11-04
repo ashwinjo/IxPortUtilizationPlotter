@@ -104,34 +104,57 @@ cp env.example .env
 
 ### 2. Edit Configuration
 
-**`.env` file (Docker services):**
+**`.env` file (TO start Docker services):**
 ```bash
-INFLUXDB_TOKEN=your-super-secret-token-change-me
+
+INFLUXDB_PORT=8086
+PROMETHEUS_PORT=9090
+GRAFANA_PORT=3000
+
+# InfluxDB Configuration
+INFLUXDB_ADMIN_USER=admin
+INFLUXDB_ADMIN_PASSWORD=admin
 INFLUXDB_ORG=keysight
 INFLUXDB_BUCKET=ixosChassisStatistics
+INFLUXDB_TOKEN='eegHpR9kkgxg5KG7rklj2zQI86-5z7yNETx0P0qQpSnw1owDxSL5IF-uQruOP-J8M_xmrhT3KWECh-QGbsdyYA=='
+INFLUXDB_RETENTION=0  # 0 = infinite retention, or specify in seconds
+
+# Grafana Configuration
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
+INFLUXDB_TOKEN=<your-super-secret-token-change-me>
 ```
 
-**`config.py` file (IxOS Poller):**
-```python
+### 2.1 .Once you have these values set. Start the Containers:
+
+```bash
+# Start Docker infrastructure (InfluxDB, Prometheus, Grafana)
+docker compose up -d
+```
+
+
+###  In .env file modify following polling intervals and chassis list **
+
+```bash
+# Polling interval in seconds - This is for my influxDB to select metrics push intevals
+POLLING_INTERVAL=120
+# Polling interval in seconds - This is for my prometheus to select metrics push intevals
+POLLING_INTERVAL_PERF_METRICS=110
 CHASSIS_LIST = [
     {"ip": "10.36.75.205", "username": "admin", "password": "admin"},
 ]
-POLLING_INTERVAL = 10  # seconds
-INFLUXDB_URL = "http://localhost:8086"
-INFLUXDB_TOKEN = "your-super-secret-token-change-me"  # Must match .env
+
 ```
 
-### 3. Start Services
+### 3. Start Python Poller to get data from Ixia Chassis
 
 ```bash
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Start Docker infrastructure (InfluxDB, Prometheus, Grafana)
-docker compose up -d
-
 # Start pollers on host
 chmod +x run_pollers.sh stop_pollers.sh
+
 ./run_pollers.sh
 ```
 
@@ -140,67 +163,9 @@ chmod +x run_pollers.sh stop_pollers.sh
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | **Grafana** | http://localhost:3000 | admin / admin |
-| **InfluxDB** | http://localhost:8086 | admin / admin |
+| **InfluxDB** | http://localhost:8086 | admin / keysight12345 |
 | **Prometheus** | http://localhost:9090 | No auth |
 
-### 5. Create Grafana Dashboard
-
-1. Login to Grafana → **Create** → **Dashboard**
-2. Add **State Timeline** panel
-3. Select **InfluxDB-IxOS** data source
-4. Use this query:
-
-```flux
-from(bucket: "ixosChassisStatistics")
-  |> range(start: -1h)
-  |> filter(fn: (r) => r["_measurement"] == "portUtilization")
-  |> filter(fn: (r) => r["chassis"] == "10.36.75.205")
-  |> filter(fn: (r) => r["_field"] == "owner")
-```
-
-5. **Value Mappings:** Free → Green | */* (owned) → Red
-
----
-
-## 📊 Common Queries
-
-### Port Utilization (Total, Owned, Free)
-
-```flux
-from(bucket: "ixosChassisStatistics")
-  |> range(start: -24h)
-  |> filter(fn: (r) => r["_measurement"] == "portUtilization")
-  |> filter(fn: (r) => r["chassis"] == "${ChassisIP}")
-  |> filter(fn: (r) => r["_field"] == "totalPorts" or 
-                       r["_field"] == "ownedPorts" or 
-                       r["_field"] == "freePorts")
-```
-
-**Visualization:** Time Series (line chart) - Shows all three metrics
-
-### Link State Monitoring
-
-```flux
-from(bucket: "ixosChassisStatistics")
-  |> range(start: -1h)
-  |> filter(fn: (r) => r["_field"] == "linkState")
-```
-
-**Visualization:** State Timeline - Color-code linkUp (green) vs linkDown (red)
-
-### Performance Metrics (Prometheus)
-
-```promql
-# CPU utilization
-cpu_utilization{chassis="10.36.75.205"}
-
-# Memory utilization
-memory_utilization{chassis="10.36.75.205"}
-```
-
-**Visualization:** Gauge or Time Series
-
----
 
 ## 🔧 Management Commands
 

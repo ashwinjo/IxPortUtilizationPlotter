@@ -7,6 +7,9 @@ Environment variables take precedence if set (useful for Docker deployment).
 
 import os
 import json
+import dotenv
+
+dotenv.load_dotenv()
 
 # =============================================================================
 # CHASSIS CONFIGURATION
@@ -99,7 +102,8 @@ def print_config():
         print("Chassis IPs:")
         for chassis in CHASSIS_LIST:
             print(f"  - {chassis.get('ip', 'N/A')}")
-    print(f"Polling Interval: {POLLING_INTERVAL} seconds")
+    print(f"Polling Interval: {POLLING_INTERVAL} seconds for InfluxDB Polling")
+    print(f"Polling Interval: {POLLING_INTERVAL_PERF_METRICS} seconds for Performance Metrics Polling")
     print(f"InfluxDB URL: {INFLUXDB_URL}")
     print(f"InfluxDB Org: {INFLUXDB_ORG}")
     print(f"InfluxDB Bucket: {INFLUXDB_BUCKET}")

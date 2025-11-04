@@ -30,7 +30,11 @@ def write_data_to_influxdb(port_list_details):
             # Tags must be strings - cardNumber and portNumber are explicitly strings
             chassis_tag = str(port_detail["chassisIp"])
             card_tag = str(port_detail["cardNumber"])  # Explicitly string
-            port_tag = str(port_detail["fullyQualifiedPortName"])  # Explicitly string
+            
+            if port_detail["fullyQualifiedPortName"] == "N/A":
+                port_tag = str(port_detail["portNumber"])
+            else:
+                port_tag = str(port_detail["fullyQualifiedPortName"])
             
             # Convert transmitState boolean to string to avoid type conflicts
             transmit_state = port_detail["transmitState"]
@@ -127,7 +131,7 @@ def delete_measurement_data():
 
 if __name__ == "__main__":
     # Uncomment the functions you want to run:
-    #delete_measurement_data()  # Run first to clear old data
+    delete_measurement_data()  # Run first to clear old data
     #write_data()               # Then write new data with Power Rangers owners
     
     # Test the connection first
@@ -135,4 +139,4 @@ if __name__ == "__main__":
     pass
     
     # Or just query existing data
-    query_data()               # Query and display the data
+    #query_data()               # Query and display the data
