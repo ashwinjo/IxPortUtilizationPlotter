@@ -1,10 +1,11 @@
 import time
 import json
+import math
+from datetime import datetime, timezone
 # Load .env file if it exists
 from dotenv import load_dotenv
  
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from IxOSRestAPICaller import get_perf_metrics
 from prometheus_client import start_http_server, Gauge
 from RestApi.IxOSRestInterface import IxRestSession
 from config import CHASSIS_LIST, POLLING_INTERVAL_PERF_METRICS
@@ -26,6 +27,32 @@ cpu_utilization = Gauge(
     'CPU utilization of the chassis',
     ['chassis']
 )
+
+
+def get_perf_metrics(session, chassisIp):
+    """Method to get Performance Metrics from Ixia Chassis"""
+    chassis_perf_dict = {}
+    # Exception Handling for Windows Chassis
+    perf = {}
+    try:
+        perf = session.get_perfcounters().data[0]
+    except Exception:
+        pass
+    
+    mem_bytes = int(perf.get("memoryInUseBytes", "0"))
+    mem_bytes_total = int(perf.get("memoryTotalBytes", "0"))
+    cpu_pert_usage = perf.get("cpuUsagePercent", "0")
+    if not mem_bytes_total:
+        mem_util = 0
+    else:
+        mem_util = (mem_bytes/mem_bytes_total)*100
+    last_update_at = datetime.now(timezone.utc).strftime("%m/%d/%Y, %H:%M:%S")
+    chassis_perf_dict.update({"chassisIp": chassisIp,
+                              "mem_utilization": mem_util, 
+                              "cpu_utilization": cpu_pert_usage,
+                              "lastUpdatedAt_UTC": last_update_at})
+    
+    return chassis_perf_dict
 
 
 def poll_single_chassis(chassis):
@@ -101,8 +128,8 @@ def main():
     print("=" * 70)
     print(f"Metrics endpoint: http://localhost:9001/metrics")
     print(f"Number of chassis: {len(CHASSIS_LIST)}")
+    print(f"Monitoring interval: {POLLING_INTERVAL_PERF_METRICS} seconds")
     print(f"Polling mode: Parallel (ThreadPoolExecutor)")
-    print(f"Monitoring interval: 110 seconds")
     print("=" * 70)
     print("\nPress Ctrl+C to stop.\n")
     
@@ -117,7 +144,7 @@ def main():
         
         elapsed_time = time.time() - start_time
         print(f"[Poll #{poll_count}] Completed in {elapsed_time:.2f} seconds")
-        print(f"Next poll in 110 seconds...\n")
+        print(f"Next poll in {POLLING_INTERVAL_PERF_METRICS} seconds...\n")
         
         time.sleep(POLLING_INTERVAL_PERF_METRICS)
 

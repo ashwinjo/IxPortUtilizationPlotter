@@ -2,16 +2,68 @@ import time
 import config
 import logging
 from dotenv import load_dotenv
-
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from datetime import datetime
-import IxOSRestAPICaller as ixOSRestCaller
 from RestApi.IxOSRestInterface import IxRestSession
 from influxDBclient import write_data_to_influxdb
 
 
 load_dotenv()
+
+def get_chassis_ports_information(session, chassisIp, chassisType):
+    """Method to get chassis port information from Ixia Chassis using RestPy"""
+    port_data_list = [] # Final port information list
+    used_port_details = []
+    total_ports = 0
+    used_ports = 0
+    
+    last_update_at = datetime.now(timezone.utc).strftime("%m/%d/%Y, %H:%M:%S")
+    port_list = session.get_ports().data
+    
+    keys_to_keep = ['owner', 
+                    'cardNumber', 
+                    'fullyQualifiedPortName', 
+                    'linkState', 
+                    'transmitState']
+
+    a = []
+    if port_list:
+        a = list(port_list[0].keys())
+        
+    # Removing the extra keys from port details json response
+    keys_to_remove = [x for x in a if x not in keys_to_keep]
+
+    # Setting up Owner
+    for port_data in port_list:
+        if not port_data.get("owner"):
+            port_data["owner"] = "Free"
+            
+        for k in keys_to_remove:
+            port_data.pop(k)
+    
+    # Creating the final port information list
+    for port in port_list:
+        port_data_list.append(port)
+    
+    # Lets get used ports, free ports and total ports
+    if port_data_list:
+        used_port_details = [item for item in port_data_list if item.get("owner")]
+        total_ports = len(port_list)
+        used_ports = len(used_port_details)
+        
+    
+    # Updating the final port information list with total ports, used ports and free ports
+    for port_data_list_item in port_data_list:
+        port_data_list_item.update({
+                                "lastUpdatedAt_UTC": last_update_at,
+                                "totalPorts": total_ports,
+                                "ownedPorts": used_ports, 
+                                "freePorts": (total_ports-used_ports),
+                                "chassisIp": chassisIp,
+                                "typeOfChassis": chassisType })
+    return port_data_list # Final port information list
+
 
 def poll_single_chassis(chassis):
     """Poll a single chassis and return its port data

@@ -24,11 +24,11 @@ if _chassis_env:
 else:
     # Default configuration (used when not running in Docker)
     CHASSIS_LIST = [
-        # {
-        #     "ip": "10.36.236.121",
-        #     "username": "admin",
-        #     "password": "Kimchi123Kimchi123!",
-        # },
+        {
+            "ip": "10.36.236.121",
+            "username": "admin",
+            "password": "Kimchi123Kimchi123!",
+        },
         {
             "ip": "10.36.75.205",
             "username": "admin",
