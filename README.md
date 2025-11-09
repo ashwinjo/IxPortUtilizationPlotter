@@ -163,7 +163,7 @@ chmod +x run_pollers.sh stop_pollers.sh
 | Service | URL | Credentials |
 |---------|-----|-------------|
 | **Grafana** | http://localhost:3000 | admin / admin |
-| **InfluxDB** | http://localhost:8086 | admin / keysight12345 |
+| **InfluxDB** | http://localhost:8086 | admin / < you set in .env file > |
 | **Prometheus** | http://localhost:9090 | No auth |
 
 
@@ -197,101 +197,6 @@ curl http://localhost:9090/-/healthy   # Prometheus health
 | **config.py** | Chassis list and poller configuration |
 | **prometheus.yml** | Prometheus scrape configuration |
 
----
-
-## 🔍 Troubleshooting
-
-| Issue | Solution |
-|-------|----------|
-| **No data in Grafana** | Verify `INFLUXDB_TOKEN` matches in `.env` and `config.py` |
-| **Connection timeout** | Check chassis is reachable: `ping <chassis_ip>` |
-| **Port already in use** | Customize ports in `.env`: `INFLUXDB_PORT=8087` |
-| **Poller not starting** | Check logs: `tail -f portInfoPoller.log` |
-| **Stale data in timeline** | Add `elapsed()` filter to Flux query (see Common Queries) |
-
-**Detailed troubleshooting:** See [SOLUTION_DEPLOYMENT.md](documents/SOLUTION_DEPLOYMENT.md)
-
----
-
-## 📊 Data Schema
-
-**Measurement:** `portUtilization`
-
-| Type | Name | Description | Example |
-|------|------|-------------|---------|
-| **Tags** | `chassis` | Chassis IP | `10.36.75.205` |
-| | `card` | Card number | `1` |
-| | `port` | Port number | `5` |
-| **Fields** | `owner` | Port owner | `Free` or `user/session` |
-| | `linkState` | Link status | `linkUp`, `linkDown` |
-| | `transmitState` | Traffic state | `active`, `idle` |
-| | `totalPorts` | Total ports | `48` |
-| | `ownedPorts` | Owned ports | `12` |
-| | `freePorts` | Available ports | `36` |
-
----
-
-## 🎨 Performance
-
-**Parallel vs Sequential Polling:**
-
-| Chassis Count | Sequential | Parallel | Improvement |
-|---------------|------------|----------|-------------|
-| 1 chassis | 2s | 2s | 0% |
-| 5 chassis | 10s | 2-3s | 70-80% |
-| 10 chassis | 20s | 2-3s | 85-90% |
-| 20 chassis | 40s | 3-4s | 90-92% |
-
----
-
-## 📁 Project Structure
-
-```
-IxPortUtilizationPlotter/
-├── 🐳 Docker Infrastructure
-│   ├── docker-compose.yml         # Service orchestration
-│   ├── prometheus.yml             # Prometheus config
-│   └── grafana/provisioning/      # Auto-configured data sources
-│
-├── 🐍 Python Pollers
-│   ├── portInfoPoller.py          # Port metrics (InfluxDB)
-│   ├── perfMetricsPoller.py       # Performance metrics (Prometheus)
-│   ├── influxDBclient.py          # InfluxDB operations
-│   ├── IxOSRestAPICaller.py       # IxOS REST API client
-│   └── RestApi/                   # Low-level REST interface
-│
-├── ⚙️ Configuration
-│   ├── .env                       # Docker environment vars
-│   ├── config.py                  # Chassis list & settings
-│   └── requirements.txt           # Python dependencies
-│
-├── 🚀 Management Scripts
-│   ├── run_pollers.sh             # Start pollers
-│   └── stop_pollers.sh            # Stop pollers
-│
-└── 📚 Documentation
-    ├── README.md                  # This file
-    ├── SOLUTION_DEPLOYMENT.md     # Detailed deployment guide
-    └── ENVIRONMENT_VARIABLES.md   # Configuration reference
-```
-
----
-
-## 📸 Dashboard Examples
-
-### Port Ownership State Timeline
-![Port Ownership Timeline](images/image%20(4).png)
-
-**Features:**
-- 🟢 **Green** = Free ports (available)
-- 🔴 **Red** = Owned ports (user/session)
-- 🕐 **Synchronized timestamps** across all chassis
-- 📊 **Real-time updates** with historical view
-
-### Multi-Port Monitoring
-![Multi-Port Dashboard](images/image%20(5).png)
-
-**Visualization:** Multiple chassis monitored simultaneously with instant visibility into port transitions and resource utilization.
 
 ---
 
