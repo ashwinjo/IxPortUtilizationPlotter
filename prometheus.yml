@@ -1,8 +1,8 @@
 global:
-  scrape_interval: 120s
+  scrape_interval: 30s
 
 scrape_configs:
   - job_name: prometheus-app
     static_configs:
       - targets:
-          - host.docker.internal:9001
+          - 10.36.229.249:9001

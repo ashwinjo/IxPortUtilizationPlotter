@@ -23,6 +23,14 @@ else
     echo "ℹ️  perfMetricsPoller.py was not running"
 fi
 
+if pgrep -f "sensorsPoller.py" > /dev/null; then
+    pkill -f sensorsPoller.py
+    echo "✓ Stopped sensorsPoller.py"
+    STOPPED=$((STOPPED + 1))
+else
+    echo "ℹ️  pensorsoPowler.py was not running"
+fi
+
 echo "========================================"
 if [ $STOPPED -eq 0 ]; then
     echo "No pollers were running"
