@@ -1,6 +1,7 @@
 import time
 import config
 import logging
+import requests
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -11,7 +12,31 @@ from config import POLLING_INTERVAL
 
 load_dotenv()
 
-def get_chassis_ports_information(session, chassisIp, chassisType):
+
+def fetch_blocked_ports():
+    """Fetch blocked ports from the blocked-ports API once per poll cycle.
+
+    Returns:
+        set of (chassis_ip, "card.port") tuples, e.g. {("10.36.236.121", "4.7")}
+        Returns empty set if API is unreachable (fallback: owned ports -> Utilized).
+    """
+    try:
+        resp = requests.get(config.BLOCKED_PORTS_URL, timeout=5)
+        if resp.status_code == 200:
+            data = resp.json()
+            blocked = set()
+            for entry in data.get("ports", []):
+                blocked.add((entry["chassis"], entry["port"]))
+            print(f"✓ Blocked ports fetched: {len(blocked)} ports")
+            return blocked
+    except Exception as e:
+        print(f"⚠ Blocked ports API unreachable ({e}), defaulting owned ports to 'Utilized'")
+    return set()
+
+
+def get_chassis_ports_information(session, chassisIp, chassisType, blocked_ports=None):
+    if blocked_ports is None:
+        blocked_ports = set()
     """Method to get chassis port information from Ixia Chassis using RestPy"""
     port_data_list = [] # Final port information list
     used_port_details = []
@@ -35,11 +60,19 @@ def get_chassis_ports_information(session, chassisIp, chassisType):
     # Removing the extra keys from port details json response
     keys_to_remove = [x for x in a if x not in keys_to_keep]
 
-    # Setting up Owner
+    # Setting up Owner and portStatus
     for port_data in port_list:
-        if not port_data.get("owner"):
+        raw_owner = port_data.get("owner", "")
+        if not raw_owner:
             port_data["owner"] = "Free"
-            
+            port_data["portStatus"] = "Free"
+        else:
+            port_key = f"{port_data['cardNumber']}.{port_data['portNumber']}"
+            if (chassisIp, port_key) in blocked_ports:
+                port_data["portStatus"] = "Blocked"
+            else:
+                port_data["portStatus"] = "Utilized"
+
         for k in keys_to_remove:
             port_data.pop(k, None)  # Use None as default to avoid KeyError if key doesn't exist
     
@@ -49,7 +82,7 @@ def get_chassis_ports_information(session, chassisIp, chassisType):
     
     # Lets get used ports, free ports and total ports
     if port_data_list:
-        used_port_details = [item for item in port_data_list if item.get("owner")]
+        used_port_details = [item for item in port_data_list if item.get("owner") != "Free"]
         total_ports = len(port_list)
         used_ports = len(used_port_details)
         
@@ -66,26 +99,30 @@ def get_chassis_ports_information(session, chassisIp, chassisType):
     return port_data_list # Final port information list
 
 
-def poll_single_chassis(chassis):
+def poll_single_chassis(chassis, blocked_ports=None):
     """Poll a single chassis and return its port data
-    
+
     Args:
         chassis: Dictionary with 'ip', 'username', 'password'
-    
+        blocked_ports: set of (chassis_ip, "card.port") tuples from fetch_blocked_ports()
+
     Returns:
         List of port details for this chassis
     """
+    if blocked_ports is None:
+        blocked_ports = set()
     try:
         session = IxRestSession(
-            chassis["ip"], 
-            chassis["username"], 
-            chassis["password"], 
+            chassis["ip"],
+            chassis["username"],
+            chassis["password"],
             verbose=False)
-        
+
         port_list_details = get_chassis_ports_information(
-            session, 
-            chassis["ip"], 
-            "NA")
+            session,
+            chassis["ip"],
+            "NA",
+            blocked_ports)
         
         print(f"✓ Successfully polled {chassis['ip']} - {len(port_list_details)} ports")
         return port_list_details
@@ -122,14 +159,15 @@ def get_chassis_port_data():
     
     if not config.CHASSIS_LIST:
         return all_port_details
-    
+
+    # Fetch blocked ports ONCE for the entire poll cycle
+    blocked_ports = fetch_blocked_ports()
+
     # Use ThreadPoolExecutor to poll all chassis simultaneously
-    # max_workers=None will use (number of processors) * 5 threads
-    # For 10 chassis, you can also set max_workers=10 explicitly
     with ThreadPoolExecutor(max_workers=len(config.CHASSIS_LIST)) as executor:
         # Submit all chassis polling tasks
         future_to_chassis = {
-            executor.submit(poll_single_chassis, chassis): chassis 
+            executor.submit(poll_single_chassis, chassis, blocked_ports): chassis
             for chassis in config.CHASSIS_LIST
         }
         

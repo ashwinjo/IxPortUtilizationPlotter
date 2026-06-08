@@ -57,6 +57,7 @@ def write_data_to_influxdb(port_list_details):
                 .field("owner", str(port_detail["owner"]))\
                 .field("linkState", str(port_detail["linkState"]))\
                 .field("transmitState", transmit_state_str)\
+                .field("portStatus", str(port_detail.get("portStatus", "Utilized")))\
                 .field("totalPorts", total_ports)\
                 .field("ownedPorts", owned_ports)\
                 .field("freePorts", free_ports)
