@@ -2,7 +2,12 @@ global:
   scrape_interval: 30s
 
 scrape_configs:
-  - job_name: prometheus-app
+  - job_name: ixos-perf-metrics
     static_configs:
       - targets:
-          - 10.36.229.249:9001
+          - host.docker.internal:9001
+
+  - job_name: ixos-sensor-metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:9002
