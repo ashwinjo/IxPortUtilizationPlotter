@@ -51,21 +51,18 @@ elif os.getenv('CHASSIS_LIST', ''):
         print(f"⚠️  Warning: Invalid CHASSIS_LIST JSON in environment variable: {e}")
         CHASSIS_LIST = []
 
-# Priority 3: Hardcoded defaults
+# Priority 3: No chassis configured
 else:
-    print(f"⚠️  API unreachable and CHASSIS_LIST not set — using hardcoded defaults")
-    CHASSIS_LIST = [
-        {
-            "ip": "10.36.236.121",
-            "username": "admin",
-            "password": "Kimchi123Kimchi123!",
-        },
-        {
-            "ip": "10.36.75.205",
-            "username": "admin",
-            "password": "admin",
-        },
-    ]
+    print(f"⚠️  API unreachable and CHASSIS_LIST not set — no chassis will be polled.")
+    print(f"    Set CHASSIS_LIST env var or run the credentials service at {_CREDENTIALS_URL}")
+    CHASSIS_LIST = []
+
+def get_chassis_list():
+    """Fetch chassis list from credentials service each call.
+    Falls back to CHASSIS_LIST (env var or hardcoded) if service unreachable."""
+    result = _fetch_chassis_from_api()
+    return result if result else CHASSIS_LIST
+
 
 # =============================================================================
 # POLLING CONFIGURATION
