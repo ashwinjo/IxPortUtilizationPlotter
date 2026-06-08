@@ -7,6 +7,7 @@ Environment variables take precedence if set (useful for Docker deployment).
 
 import os
 import json
+import requests
 import dotenv
 
 dotenv.load_dotenv()
@@ -15,17 +16,44 @@ dotenv.load_dotenv()
 # CHASSIS CONFIGURATION
 # =============================================================================
 
-# Try to load chassis list from environment variable first (Docker mode)
-_chassis_env = os.getenv('CHASSIS_LIST', '')
-if _chassis_env:
+_CREDENTIALS_URL = os.getenv(
+    'CREDENTIALS_URL',
+    'http://host.docker.internal:3001/api/config/credentials'
+)
+
+def _fetch_chassis_from_api():
+    """Try to fetch chassis credentials from IxiaInventoryExplorer API.
+    Returns list of {ip, username, password} dicts, or None on failure."""
+    try:
+        resp = requests.get(_CREDENTIALS_URL, timeout=3)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get('success') and data.get('credentials'):
+                print(f"✓ Loaded {data['count']} chassis from {_CREDENTIALS_URL}")
+                return data['credentials']
+    except Exception:
+        pass
+    return None
+
+
+# Priority 1: IxiaInventoryExplorer API
+_api_chassis = _fetch_chassis_from_api()
+if _api_chassis:
+    CHASSIS_LIST = _api_chassis
+
+# Priority 2: CHASSIS_LIST environment variable
+elif os.getenv('CHASSIS_LIST', ''):
+    _chassis_env = os.getenv('CHASSIS_LIST', '')
     try:
         CHASSIS_LIST = json.loads(_chassis_env)
+        print(f"✓ Loaded {len(CHASSIS_LIST)} chassis from CHASSIS_LIST env var")
     except json.JSONDecodeError as e:
         print(f"⚠️  Warning: Invalid CHASSIS_LIST JSON in environment variable: {e}")
-        print(f"   Using default configuration from code.")
         CHASSIS_LIST = []
+
+# Priority 3: Hardcoded defaults
 else:
-    # Default configuration (used when not running in Docker)
+    print(f"⚠️  API unreachable and CHASSIS_LIST not set — using hardcoded defaults")
     CHASSIS_LIST = [
         {
             "ip": "10.36.236.121",
@@ -68,6 +96,17 @@ INFLUXDB_ORG = os.getenv('INFLUXDB_ORG', 'keysight')
 
 # InfluxDB Bucket (optional, defaults in influxDBclient.py)
 INFLUXDB_BUCKET = os.getenv('INFLUXDB_BUCKET', 'ixosChassisStatistics')
+
+# =============================================================================
+# BLOCKED PORTS API CONFIGURATION
+# =============================================================================
+
+# URL for the blocked ports API (IxPortUtilizationAuditor or similar)
+# Returns ports actively locked in IxNetwork sessions
+BLOCKED_PORTS_URL = os.getenv(
+    'BLOCKED_PORTS_URL',
+    'http://localhost:8890/api/v1/ports/blocked'
+)
 
 # =============================================================================
 # CONFIGURATION VALIDATION
