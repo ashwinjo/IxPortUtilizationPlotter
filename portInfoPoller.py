@@ -21,7 +21,12 @@ def fetch_blocked_ports():
         Returns empty set if API is unreachable (fallback: owned ports -> Utilized).
     """
     try:
-        resp = requests.get(config.BLOCKED_PORTS_URL, timeout=5)
+        url = config.BLOCKED_PORTS_URL
+        if "?" in url:
+            url += "&refresh=true"
+        else:
+            url += "?refresh=true"
+        resp = requests.get(url, timeout=5)
         if resp.status_code == 200:
             data = resp.json()
             blocked = set()
@@ -60,18 +65,21 @@ def get_chassis_ports_information(session, chassisIp, chassisType, blocked_ports
     # Removing the extra keys from port details json response
     keys_to_remove = [x for x in a if x not in keys_to_keep]
 
-    # Setting up Owner and portStatus
+    # Setting up Owner, portStatus, and blocked
     for port_data in port_list:
         raw_owner = port_data.get("owner", "")
         if not raw_owner:
             port_data["owner"] = "Free"
             port_data["portStatus"] = "Free"
+            port_data["blocked"] = False
         else:
             port_key = f"{port_data['cardNumber']}.{port_data['portNumber']}"
             if (chassisIp, port_key) in blocked_ports:
                 port_data["portStatus"] = "Blocked"
+                port_data["blocked"] = True
             else:
                 port_data["portStatus"] = "Utilized"
+                port_data["blocked"] = False
 
         for k in keys_to_remove:
             port_data.pop(k, None)  # Use None as default to avoid KeyError if key doesn't exist
@@ -145,7 +153,8 @@ def poll_single_chassis(chassis, blocked_ports=None):
             'freePorts': 'NA',
             'chassisIp': chassis["ip"],
             'typeOfChassis': 'NA',
-            'transmitState': 'NA'
+            'transmitState': 'NA',
+            'blocked': False
         }]
 
 
@@ -157,18 +166,19 @@ def get_chassis_port_data():
     """
     all_port_details = []
     
-    if not config.CHASSIS_LIST:
+    chassis_list = config.get_chassis_list()
+    if not chassis_list:
         return all_port_details
 
     # Fetch blocked ports ONCE for the entire poll cycle
     blocked_ports = fetch_blocked_ports()
 
     # Use ThreadPoolExecutor to poll all chassis simultaneously
-    with ThreadPoolExecutor(max_workers=len(config.CHASSIS_LIST)) as executor:
+    with ThreadPoolExecutor(max_workers=len(chassis_list)) as executor:
         # Submit all chassis polling tasks
         future_to_chassis = {
             executor.submit(poll_single_chassis, chassis, blocked_ports): chassis
-            for chassis in config.CHASSIS_LIST
+            for chassis in chassis_list
         }
         
         # Collect results as they complete
@@ -187,33 +197,52 @@ if __name__ == '__main__':
     # OPTIONAL: Uncomment below to delete all historical data on startup (use with caution!)
     # print("Deleting all data from InfluxDB measurement...")
     # delete_measurement_data()
-    
+
+    import os
+    dry_run = os.getenv('DRY_RUN', '').lower() in ('1', 'true', 'yes')
+
     # Start parallel chassis poller
-    print(f"Starting parallel chassis poller for {len(config.CHASSIS_LIST)} chassis...")
+    print(f"Starting parallel chassis poller (credentials service: {config._CREDENTIALS_URL})")
     print(f"Polling interval: {config.POLLING_INTERVAL} seconds")
-    print(f"Chassis IPs: {[c['ip'] for c in config.CHASSIS_LIST]}")
+    if dry_run:
+        print("DRY RUN -- InfluxDB writes skipped")
     print("-" * 80)
-    
+
     poll_count = 0
     while True:
         poll_count += 1
         start_time = time.time()
-        
+
         print(f"\n[Poll #{poll_count}] Starting parallel poll at {datetime.now().strftime('%H:%M:%S')}")
-        
+
         # Poll all chassis in parallel
         port_list_details = get_chassis_port_data()
-        
+
         poll_duration = time.time() - start_time
         print(f"[Poll #{poll_count}] Collected {len(port_list_details)} total ports in {poll_duration:.2f}s")
-        
+
         # Write all data to InfluxDB (synchronized timestamps)
         if port_list_details:
-            write_data_to_influxdb(port_list_details)
-            print(f"[Poll #{poll_count}] Written to InfluxDB")
+            if dry_run:
+                for port_detail in port_list_details:
+                    chassis_tag = str(port_detail["chassisIp"])
+                    card_tag = str(port_detail["cardNumber"])
+                    if port_detail.get("fullyQualifiedPortName", "N/A") == "N/A":
+                        port_tag = str(port_detail["portNumber"])
+                    else:
+                        port_tag = str(port_detail["fullyQualifiedPortName"])
+                    transmit_state = port_detail["transmitState"]
+                    if isinstance(transmit_state, bool):
+                        transmit_state_str = "active" if transmit_state else "idle"
+                    else:
+                        transmit_state_str = str(transmit_state)
+                    print(f"[DRY RUN] ✓ Would write: {chassis_tag}/{card_tag}/{port_tag} -> Owner={port_detail['owner']}, LinkState={port_detail['linkState']}, TransmitState={transmit_state_str}, Blocked={port_detail.get('blocked', False)}, portStatus={port_detail.get('portStatus', 'Utilized')}")
+            else:
+                write_data_to_influxdb(port_list_details)
+                print(f"[Poll #{poll_count}] Written to InfluxDB")
         else:
-            print(f"[Poll #{poll_count}] ⚠ No data collected")
-        
+            print(f"[Poll #{poll_count}] No data collected")
+
         # Wait for next polling interval
         time.sleep(POLLING_INTERVAL)
         print("-" * 80)

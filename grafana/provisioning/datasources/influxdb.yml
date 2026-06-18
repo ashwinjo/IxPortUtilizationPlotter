@@ -8,7 +8,7 @@ datasources:
     jsonData:
       version: Flux
       organization: keysight
-      defaultBucket: ixosChassisStatistics
+      defaultBucket: portBlockedMetrics
       tlsSkipVerify: true
     secureJsonData:
       token: ${INFLUXDB_TOKEN}

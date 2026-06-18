@@ -2,12 +2,12 @@ import influxdb_client
 from influxdb_client.client.write_api import SYNCHRONOUS
 import time
 import random
-from config import INFLUXDB_TOKEN, INFLUXDB_URL
+from config import INFLUXDB_TOKEN, INFLUXDB_URL, INFLUXDB_BUCKET, INFLUXDB_ORG
 
 # InfluxDB Configuration
 
-bucket = "ixosChassisStatistics"
-org = "keysight"
+bucket = INFLUXDB_BUCKET
+org = INFLUXDB_ORG
 token = INFLUXDB_TOKEN
 # Store the URL of your InfluxDB instance
 url=INFLUXDB_URL
@@ -58,13 +58,14 @@ def write_data_to_influxdb(port_list_details):
                 .field("linkState", str(port_detail["linkState"]))\
                 .field("transmitState", transmit_state_str)\
                 .field("portStatus", str(port_detail.get("portStatus", "Utilized")))\
+                .field("blocked", bool(port_detail.get("blocked", False)))\
                 .field("totalPorts", total_ports)\
                 .field("ownedPorts", owned_ports)\
                 .field("freePorts", free_ports)
             
             # Actually write the point to InfluxDB
             write_api.write(bucket=bucket, org=org, record=p)
-            print(f"✓ Written: {chassis_tag}/{card_tag}/{port_tag} -> Owner={port_detail['owner']}, LinkState={port_detail['linkState']}, TransmitState={transmit_state_str}")
+            print(f"✓ Written: {chassis_tag}/{card_tag}/{port_tag} -> Owner={port_detail['owner']}, LinkState={port_detail['linkState']}, TransmitState={transmit_state_str}, Blocked={port_detail.get('blocked', False)}")
         except Exception as e:
             print(f"✗ Error writing data for {port_detail.get('chassisIp', 'unknown')}/{port_detail.get('cardNumber', 'unknown')}/{port_detail.get('portNumber', 'unknown')}: {e}")
 
@@ -82,15 +83,15 @@ def query_data():
     result = query_api.query(org=org, query=query)
     
     # Process and display results in row format
-    print(f"\n{'='*120}")
+    print(f"\n{'='*132}")
     print(f"MEASUREMENT: portUtilization")
-    print(f"{'='*120}")
+    print(f"{'='*132}")
     
     # Print header
     if result and result[0].records:
         first_record = result[0].records[0]
-        print(f"\n{'Time':<30} {'Chassis':<18} {'Card':<6} {'Port':<6} {'Owner':<15} {'LinkState':<10} {'TransmitState':<12} {'Total':<6} {'Owned':<6} {'Free':<6}")
-        print("-" * 120)
+        print(f"\n{'Time':<30} {'Chassis':<18} {'Card':<6} {'Port':<6} {'Owner':<15} {'LinkState':<10} {'TransmitState':<12} {'Blocked':<8} {'Total':<6} {'Owned':<6} {'Free':<6}")
+        print("-" * 132)
     
     # Print each row
     for table in result:
@@ -102,13 +103,14 @@ def query_data():
             owner = record.values.get("owner", "N/A")
             link_state = record.values.get("linkState", "N/A")
             transmit_state = record.values.get("transmitState", "N/A")
+            blocked = record.values.get("blocked", "N/A")
             total_ports = record.values.get("totalPorts", "N/A")
             owned_ports = record.values.get("ownedPorts", "N/A")
             free_ports = record.values.get("freePorts", "N/A")
             
-            print(f"{time_str:<30} {chassis:<18} {card:<6} {port:<6} {owner:<15} {link_state:<10} {transmit_state:<12} {total_ports:<6} {owned_ports:<6} {free_ports:<6}")
+            print(f"{time_str:<30} {chassis:<18} {card:<6} {port:<6} {owner:<15} {link_state:<10} {transmit_state:<12} {str(blocked):<8} {total_ports:<6} {owned_ports:<6} {free_ports:<6}")
     
-    print(f"{'='*120}\n")
+    print(f"{'='*132}\n")
     
     return result
 
@@ -130,14 +132,23 @@ def delete_measurement_data():
 
 
 
+def delete_na_port_entries():
+    """Delete all entries where card=NA and port=NA tags"""
+    delete_api = client.delete_api()
+    start = "1970-01-01T00:00:00Z"
+    stop = "2099-12-31T23:59:59Z"
+    delete_api.delete(
+        start=start,
+        stop=stop,
+        predicate='_measurement="portUtilization" AND card="NA" AND port="NA"',
+        bucket=bucket,
+        org=org
+    )
+    print("Deleted all entries with card=NA and port=NA from 'portUtilization'")
+
+
 if __name__ == "__main__":
     # Uncomment the functions you want to run:
-    delete_measurement_data()  # Run first to clear old data
-    #write_data()               # Then write new data with Power Rangers owners
-    
-    # Test the connection first
-    #test_write_and_query()
-    pass
-    
-    # Or just query existing data
+    #delete_measurement_data()  # Delete ALL data from portUtilization
+    delete_na_port_entries()   # Delete only card=NA / port=NA entries
     #query_data()               # Query and display the data

@@ -74,7 +74,7 @@ echo "========================"
 if pgrep -f "portInfoPoller.py" > /dev/null; then
     echo "⚠️  portInfoPoller.py is already running (PID: $(pgrep -f portInfoPoller.py))"
 else
-    nohup python3 portInfoPoller.py > portInfoPoller.log 2>&1 &
+    nohup python3 -u portInfoPoller.py > portInfoPoller.log 2>&1 &
     echo "✓ Started portInfoPoller.py (PID: $!)"
 fi
 
@@ -82,7 +82,7 @@ fi
 if pgrep -f "perfMetricsPoller.py" > /dev/null; then
     echo "⚠️  perfMetricsPoller.py is already running (PID: $(pgrep -f perfMetricsPoller.py))"
 else
-    nohup python3 perfMetricsPoller.py > perfMetricsPoller.log 2>&1 &
+    nohup python3 -u perfMetricsPoller.py > perfMetricsPoller.log 2>&1 &
     echo "✓ Started perfMetricsPoller.py (PID: $!)"
 fi
 
@@ -90,7 +90,7 @@ fi
 if pgrep -f "sensorsPoller.py" > /dev/null; then
     echo "⚠️  sensorsPoller.py is already running (PID: $(pgrep -f sensorsPoller.py))"
 else
-    nohup python3 sensorsPoller.py > sensorsPoller.log 2>&1 &
+    nohup python3 -u sensorsPoller.py > sensorsPoller.log 2>&1 &
     echo "✓ Started sensorsPoller.py (PID: $!)"
 fi
 

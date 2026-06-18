@@ -92,7 +92,7 @@ INFLUXDB_TOKEN = os.getenv(
 INFLUXDB_ORG = os.getenv('INFLUXDB_ORG', 'keysight')
 
 # InfluxDB Bucket (optional, defaults in influxDBclient.py)
-INFLUXDB_BUCKET = os.getenv('INFLUXDB_BUCKET', 'ixosChassisStatistics')
+INFLUXDB_BUCKET = os.getenv('INFLUXDB_BUCKET', 'portBlockedMetrics')
 
 # =============================================================================
 # BLOCKED PORTS API CONFIGURATION

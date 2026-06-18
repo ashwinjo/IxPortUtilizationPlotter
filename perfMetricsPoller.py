@@ -8,7 +8,8 @@ from dotenv import load_dotenv
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from prometheus_client import start_http_server, Gauge
 from RestApi.IxOSRestInterface import IxRestSession
-from config import CHASSIS_LIST, POLLING_INTERVAL_PERF_METRICS
+import config
+from config import POLLING_INTERVAL_PERF_METRICS
 
 load_dotenv()
 # ==============================================================================
@@ -79,17 +80,17 @@ def get_chassis_metrics():
     Get chassis metrics from all chassis in parallel using ThreadPoolExecutor.
     This ensures all chassis are polled at approximately the same time.
     """
-    if not CHASSIS_LIST:
+    chassis_list = config.get_chassis_list()
+    if not chassis_list:
         print("⚠️  No chassis configured in CHASSIS_LIST")
         return
-    
+
     # Use ThreadPoolExecutor to poll all chassis in parallel
-    # max_workers=None means it will default to min(32, num_chassis + 4)
-    with ThreadPoolExecutor(max_workers=len(CHASSIS_LIST)) as executor:
+    with ThreadPoolExecutor(max_workers=len(chassis_list)) as executor:
         # Submit all polling tasks
         future_to_chassis = {
-            executor.submit(poll_single_chassis, chassis): chassis 
-            for chassis in CHASSIS_LIST
+            executor.submit(poll_single_chassis, chassis): chassis
+            for chassis in chassis_list
         }
         
         # Process results as they complete
@@ -127,7 +128,7 @@ def main():
     print("Chassis Performance Monitoring Service Started")
     print("=" * 70)
     print(f"Metrics endpoint: http://localhost:9001/metrics")
-    print(f"Number of chassis: {len(CHASSIS_LIST)}")
+    print(f"Number of chassis: {len(config.get_chassis_list())}")
     print(f"Monitoring interval: {POLLING_INTERVAL_PERF_METRICS} seconds")
     print(f"Polling mode: Parallel (ThreadPoolExecutor)")
     print("=" * 70)
