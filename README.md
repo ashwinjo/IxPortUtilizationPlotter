@@ -1,217 +1,275 @@
-# IxOS Metrics Plotter
+# IxOS Port Utilization Plotter
 
-**Real-time monitoring and visualization of Ixia/Keysight IxOS chassis port utilization with parallel polling, time-series storage, and interactive dashboards.**
-
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue?logo=docker)](https://www.docker.com/)
-[![Python](https://img.shields.io/badge/Python-3.7+-green?logo=python)](https://www.python.org/)
-[![InfluxDB](https://img.shields.io/badge/InfluxDB-2.x-orange)](https://www.influxdata.com/)
-[![Grafana](https://img.shields.io/badge/Grafana-9.x+-yellow?logo=grafana)](https://grafana.com/)
+Real-time monitoring for Ixia/Keysight IxOS chassis. Polls port ownership, link state, and blocked status — stores time-series data in InfluxDB, exposes CPU/sensor metrics via Prometheus, visualizes everything in Grafana.
 
 ---
 
-## 🎯 Overview
-
-Monitor multiple IxOS chassis simultaneously with real-time visibility into:
-- **Port Ownership** - Track which user/session owns each port
-- **Link Status** - Monitor port connectivity (up/down)
-- **Transmit State** - Track traffic state (active/idle)
-- **Resource Utilization** - View total, owned, and free ports
-
-**Key Benefits:**
-- ⚡ **Parallel polling** - Monitor 10+ chassis in ~2 seconds
-- 📊 **Time-series visualization** - Historical analysis with Grafana
-- 🐳 **One-command deployment** - Docker Compose for quick setup
-- 🔄 **Synchronized timestamps** - Aligned data across all chassis
-
----
-
-## 🏗️ Solution Architecture
+## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        IxOS CHASSIS FLEET                           │
-│   [Chassis 1] ─── [Chassis 2] ─── ... ─── [Chassis N]             │
-│      :8443            :8443                    :8443                │
-└──────────────────────────────┬──────────────────────────────────────┘
-                               │ REST API (Parallel Polling)
-                               │
-┌──────────────────────────────▼──────────────────────────────────────┐
-│                      HOST MACHINE                                   │
-│  ┌────────────────────────────────────────────────────────────┐    │
-│  │  IxOS Poller (Python)                                      │    │
-│  │  • portInfoPoller.py  → Port metrics (InfluxDB)           │    │
-│  │  • perfMetricsPoller.py → Performance metrics (Prometheus)│    │
-│  │  • Parallel polling with ThreadPoolExecutor                │    │
-│  └────────────────────┬───────────────────┬────────────────────┘    │
-└───────────────────────┼───────────────────┼─────────────────────────┘
-                        │                   │
-        HTTP :8086      │                   │ HTTP :9001
-                        │                   │
-┌───────────────────────▼───────────────────▼─────────────────────────┐
-│                      DOCKER COMPOSE STACK                           │
-│                                                                     │
-│  ┌──────────────────┐  ┌──────────────────┐  ┌─────────────────┐  │
-│  │   InfluxDB       │  │   Prometheus     │  │    Grafana      │  │
-│  │   :8086          │  │   :9090          │  │    :3000        │  │
-│  │                  │  │                  │  │                 │  │
-│  │ • Port metrics   │  │ • Perf metrics   │  │ • Dashboards    │  │
-│  │ • Time-series DB │  │ • System health  │  │ • Visualization │  │
-│  │ • Infinite store │  │ • 15d retention  │  │ • Multi-source  │  │
-│  └──────────────────┘  └──────────────────┘  └─────────────────┘  │
-│                                                                     │
-│  📦 Persistent Volumes: influxdb-data, prometheus-data, grafana-data │
-└─────────────────────────────────────────────────────────────────────┘
+IxOS Chassis (HTTPS :443)
+       │
+       ├─ portInfoPoller.py ──────► InfluxDB :8087       (port ownership, blocked status)
+       ├─ perfMetricsPoller.py ───► Prometheus :9001      (CPU, memory)
+       └─ sensorsPoller.py ───────► Prometheus :9002      (temp, fans, current)
+                                          │
+                               Prometheus :9090 scrapes both
+                                          │
+                               Grafana :3005  (dashboards — both datasources)
 ```
 
-**Data Flow:**
-1. Python poller queries all chassis in parallel (2-3s for 10+ chassis)
-2. Port metrics → InfluxDB | Performance metrics → Prometheus
-3. Grafana visualizes both data sources with synchronized timestamps
+Pollers run on the **host machine**. InfluxDB, Prometheus, Grafana run in **Docker**.
 
 ---
 
-## ✨ Features
+## Prerequisites
 
-- ⚡ **Parallel Polling** - ThreadPoolExecutor for simultaneous chassis queries
-- 🔄 **Synchronized Timestamps** - Aligned data across all chassis
-- 📊 **Dual Storage** - InfluxDB (port data) + Prometheus (system metrics)
-- 🎨 **Interactive Dashboards** - State Timeline, Time Series, Gauges
-- 🐳 **Docker Compose** - One-command infrastructure deployment
-- 🛡️ **Health Monitoring** - Automatic service health checks
-- 💾 **Persistent Storage** - Data survives container restarts
-- 🔧 **Configurable** - Environment-based configuration
+- Docker 20.10+ and Docker Compose 2.0+
+- Python 3.7+
+- Network access to IxOS chassis REST API (:443)
 
 ---
 
-## 📋 Prerequisites
+## Quick Start
 
-- **Docker** 20.10+ & **Docker Compose** 2.0+
-- **Python** 3.7+ with pip
-- Network access to IxOS chassis (REST API enabled)
-- 2GB free disk space
+### One-Command Bootstrap (recommended for fresh clones)
+
+After cloning, run:
+
+```bash
+./start.sh
+```
+
+This single script handles everything:
+- Copies `.env.example` → `.env` if missing (edit credentials before rerunning if needed)
+- Frees any processes blocking required ports
+- Creates Docker containers if absent; restarts them if already present
+- Waits for containers to be healthy
+- Starts all three pollers in the background
+
+**After it completes, configure your Grafana dashboard queries — that is the only remaining step.**
+
+Logs are written to the repo root:
+```bash
+tail -f portInfoPoller.log      # port ownership / blocked status
+tail -f perfMetricsPoller.log   # CPU / memory
+tail -f sensorsPoller.log       # temperature / fans / current
+```
 
 ---
 
-## 🚀 Quick Start
+### Manual Setup (alternative)
 
-### 1. Clone and Configure
+### 1. Clone
 
 ```bash
 git clone https://github.com/yourusername/IxPortUtilizationPlotter.git
 cd IxPortUtilizationPlotter
-cp env.example .env
 ```
 
-### 2. Edit Configuration
+### 2. Configure `.env`
 
-**`.env` file (TO start Docker services):**
 ```bash
+cp .env.example .env
+```
 
-INFLUXDB_PORT=8086
+Edit `.env` — minimum required changes:
+
+```bash
+# ── Ports ──────────────────────────────────────────────────
+INFLUXDB_PORT=8087
 PROMETHEUS_PORT=9090
-GRAFANA_PORT=3000
+GRAFANA_PORT=3005
 
-# InfluxDB Configuration
+# ── InfluxDB ───────────────────────────────────────────────
 INFLUXDB_ADMIN_USER=admin
-INFLUXDB_ADMIN_PASSWORD=admin
+INFLUXDB_ADMIN_PASSWORD=Keysight12345!
 INFLUXDB_ORG=keysight
-INFLUXDB_BUCKET=ixosChassisStatistics
-INFLUXDB_TOKEN='eegHpR9kkgxg5KG7rklj2zQI86-5z7yNETx0P0qQpSnw1owDxSL5IF-uQruOP-J8M_xmrhT3KWECh-QGbsdyYA=='
-INFLUXDB_RETENTION=0  # 0 = infinite retention, or specify in seconds
+INFLUXDB_BUCKET=portBlockedMetrics
+INFLUXDB_TOKEN='your-super-secret-token-here'
+INFLUXDB_RETENTION=0                          # 0 = infinite
 
-# Grafana Configuration
+# ── Grafana ────────────────────────────────────────────────
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=admin
-INFLUXDB_TOKEN=<your-super-secret-token-change-me>
+
+# ── Pollers ────────────────────────────────────────────────
+INFLUXDB_URL=http://localhost:8087
+POLLING_INTERVAL=30
+POLLING_INTERVAL_PERF_METRICS=30
+POLLING_INTERVAL_SENSOR_METRICS=30
+
+# ── Chassis (if not using credentials service) ─────────────
+CHASSIS_LIST=[{"ip":"10.x.x.x","username":"admin","password":"admin"}]
 ```
 
-### 2.1 .Once you have these values set. Start the Containers:
+> **Chassis credentials:** If you run IxiaInventoryExplorer, set `CREDENTIALS_URL` instead of `CHASSIS_LIST`. The poller tries the API first and falls back to `CHASSIS_LIST`.
+
+### 3. Start Docker Stack
 
 ```bash
-# Start Docker infrastructure (InfluxDB, Prometheus, Grafana)
 docker compose up -d
+docker compose ps        # wait until all show "healthy"
 ```
 
+This creates:
+- InfluxDB with bucket `portBlockedMetrics` (auto-initialized from `.env`)
+- Prometheus scraping host ports 9001 and 9002
+- Grafana with InfluxDB + Prometheus datasources pre-provisioned
 
-###  In .env file modify following polling intervals and chassis list **
-
-```bash
-# Polling interval in seconds - This is for my influxDB to select metrics push intevals
-POLLING_INTERVAL=120
-# Polling interval in seconds - This is for my prometheus to select metrics push intevals
-POLLING_INTERVAL_PERF_METRICS=110
-CHASSIS_LIST = [
-    {"ip": "10.36.75.205", "username": "admin", "password": "admin"},
-]
-
-```
-
-### 3. Start Python Poller to get data from Ixia Chassis
+### 4. Start Pollers
 
 ```bash
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Start pollers on host
 chmod +x run_pollers.sh stop_pollers.sh
-
 ./run_pollers.sh
 ```
 
-### 4. Access Web Interfaces
-
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| **Grafana** | http://localhost:3000 | admin / admin |
-| **InfluxDB** | http://localhost:8086 | admin / < you set in .env file > |
-| **Prometheus** | http://localhost:9090 | No auth |
-
-
-## 🔧 Management Commands
+Verify data is flowing:
 
 ```bash
-# View logs
-docker compose logs -f                 # All services
-docker compose logs -f influxdb        # Specific service
-tail -f portInfoPoller.log             # Poller logs
+tail -f portInfoPoller.log      # should show "Written: chassis/card/port"
+tail -f perfMetricsPoller.log   # should show CPU/MEM percentages
+tail -f sensorsPoller.log       # should show sensor readings
+```
 
-# Control services
-docker compose stop                    # Stop all
-docker compose restart                 # Restart all
-./stop_pollers.sh                      # Stop pollers
+### 5. Open Grafana
 
-# Health checks
-docker compose ps                      # Service status
-curl http://localhost:8086/health      # InfluxDB health
-curl http://localhost:9090/-/healthy   # Prometheus health
+URL: **http://localhost:3005** — login: `admin` / `admin`
+
+---
+
+## Web Interfaces
+
+| Service | URL | Auth |
+|---------|-----|------|
+| Grafana | http://localhost:3005 | admin / admin |
+| InfluxDB | http://localhost:8087 | admin / (your password) |
+| Prometheus | http://localhost:9090 | none |
+
+---
+
+## Grafana Dashboard Setup
+
+### Dashboard Variable: `chassis`
+
+In dashboard Settings → Variables → New variable:
+- Type: **Query**
+- Datasource: **InfluxDB-IxOS**
+- Query:
+```flux
+import "influxdata/influxdb/schema"
+schema.tagValues(bucket: "portBlockedMetrics", tag: "chassis")
+```
+
+### Panel: Blocked Port Count Over Time
+
+```flux
+from(bucket: "portBlockedMetrics")
+  |> range(start: v.timeRangeStart, stop: v.timeRangeStop)
+  |> filter(fn: (r) => r._measurement == "portUtilization")
+  |> filter(fn: (r) => r.chassis == "${chassis}")
+  |> filter(fn: (r) => r._field == "portStatus")
+  |> map(fn: (r) => ({r with _value: if r._value == "Blocked" then 1 else 0}))
+  |> aggregateWindow(every: v.windowPeriod, fn: sum, createEmpty: false)
+```
+
+### Panel: Currently Blocked Ports + Owner (Table)
+
+```flux
+from(bucket: "portBlockedMetrics")
+  |> range(start: -5m)
+  |> filter(fn: (r) => r._measurement == "portUtilization")
+  |> filter(fn: (r) => r.chassis == "${chassis}")
+  |> filter(fn: (r) => r._field == "owner" or r._field == "portStatus")
+  |> last()
+  |> pivot(rowKey: ["chassis", "card", "port"], columnKey: ["_field"], valueColumn: "_value")
+  |> filter(fn: (r) => r.portStatus == "Blocked")
+  |> keep(columns: ["chassis", "card", "port", "owner", "_time"])
+```
+
+### Quick Sanity Check (Explore tab)
+
+Paste in Grafana → Explore → InfluxDB to verify data is flowing:
+
+```flux
+from(bucket: "portBlockedMetrics")
+  |> range(start: -1h)
+  |> filter(fn: (r) => r._measurement == "portUtilization")
+  |> filter(fn: (r) => r._field == "portStatus")
+  |> filter(fn: (r) => r._value == "Blocked")
+  |> group(columns: ["chassis", "card", "port"])
+  |> count()
 ```
 
 ---
 
-## 📚 Documentation
+## Management
 
-| Document | Description |
-|----------|-------------|
-| **[SOLUTION_DEPLOYMENT.md](documents/SOLUTION_DEPLOYMENT.md)** | Complete deployment guide with troubleshooting |
-| **[ENVIRONMENT_VARIABLES.md](documents/ENVIRONMENT_VARIABLES.md)** | All environment variables reference |
-| **config.py** | Chassis list and poller configuration |
-| **prometheus.yml** | Prometheus scrape configuration |
+```bash
+# Pollers
+./run_pollers.sh                  # start all three
+./stop_pollers.sh                 # stop all
 
+# Logs
+tail -f portInfoPoller.log
+tail -f perfMetricsPoller.log
+tail -f sensorsPoller.log
+
+# Docker
+docker compose up -d              # start stack
+docker compose down               # stop stack (keeps data)
+docker compose down -v            # stop + wipe all data (fresh start)
+docker compose ps                 # check health
+docker compose logs -f influxdb   # service logs
+
+# Debug config
+python3 config.py                 # print current config + warnings
+```
 
 ---
 
-## 🤝 Contributing
+## Fresh Start / Reset
 
-Contributions welcome! Open an issue or submit a pull request.
+To wipe all data and reinitialize:
+
+```bash
+docker compose down -v   # destroys volumes
+docker compose up -d     # reinitializes with current .env settings
+```
+
+InfluxDB auto-creates the bucket on first boot using `INFLUXDB_BUCKET` from `.env`.
 
 ---
 
-## 📄 License
+## Port Status Classification
 
-Open source project for Keysight/Ixia IxOS chassis monitoring.
+Each port is classified every poll cycle:
+
+| Condition | portStatus |
+|-----------|-----------|
+| No owner | `Free` |
+| Has owner + in blocked list | `Blocked` |
+| Has owner + not blocked | `Utilized` |
+
+Blocked list is fetched from `BLOCKED_PORTS_URL` once per cycle. If unreachable, all owned ports default to `Utilized`.
 
 ---
 
-**Built with ❤️ for network test automation teams**
+## InfluxDB Schema
 
-📊 **Happy Monitoring!**
+```
+Measurement : portUtilization
+Bucket      : portBlockedMetrics
+
+Tags   : chassis | card | port
+Fields : portStatus | owner | linkState | transmitState | blocked
+         totalPorts | ownedPorts | freePorts
+```
+
+---
+
+## Further Reading
+
+- [HowCodeWorks.md](HowCodeWorks.md) — detailed internals: data flow, config priority, API endpoints, Flux query patterns
+- `config.py` — all configurable values with env var names
+- `prometheus.yml` — Prometheus scrape config
