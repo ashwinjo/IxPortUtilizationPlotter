@@ -134,7 +134,7 @@ tail -f sensorsPoller.log       # should show sensor readings
 
 ### 5. Open Grafana
 
-URL: **http://localhost:3005** — login: `admin` / `admin`
+URL: **http://localhost:3005** — anonymous viewer access enabled by default (no login required for read-only dashboards). Admin login: `admin` / `admin`.
 
 ---
 
@@ -142,9 +142,11 @@ URL: **http://localhost:3005** — login: `admin` / `admin`
 
 | Service | URL | Auth |
 |---------|-----|------|
-| Grafana | http://localhost:3005 | admin / admin |
+| Grafana | http://localhost:3005 | Anonymous (Viewer) — no login needed |
 | InfluxDB | http://localhost:8087 | admin / (your password) |
 | Prometheus | http://localhost:9090 | none |
+
+> Grafana is configured with `GF_SECURITY_ALLOW_EMBEDDING=true` and `GF_AUTH_ANONYMOUS_ENABLED=true` so dashboards render correctly inside iframes (e.g. IxiaL23LabManager shell).
 
 ---
 
